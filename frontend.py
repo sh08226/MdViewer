@@ -158,6 +158,34 @@ INDEX_HTML = r"""<!DOCTYPE html>
   #down p{color:var(--txt2);margin:.5em 0 18px;font-size:14px;line-height:1.7}
   #down .row{display:flex;gap:12px;justify-content:center}
   #down .btn.retry{border-color:var(--cyan);color:var(--cyan)}
+  /* ===== 就地编辑 ===== */
+  #editBtn{display:none}
+  body.editable #editBtn{display:inline-flex}
+  body.edit-mode #preview [data-ln]{border-radius:6px; transition:box-shadow .12s}
+  body.edit-mode #preview [data-ln]:hover{
+    outline:2px dashed var(--accent); outline-offset:3px; cursor:text;
+  }
+  body.edit-mode #preview{cursor:default}
+  #edMask{position:fixed; inset:0; z-index:55; display:none; place-items:center;
+    background:rgba(7,11,26,.45); backdrop-filter:blur(2px)}
+  #edMask.show{display:grid}
+  #edBox{
+    width:min(720px, 92vw); background:var(--bg0); border:1px solid var(--line2);
+    border-radius:14px; box-shadow:0 18px 60px rgba(0,0,0,.35); overflow:hidden;
+    display:flex; flex-direction:column; max-height:84vh;
+  }
+  #edBox .edhead{display:flex; align-items:center; gap:10px; padding:10px 14px;
+    border-bottom:1px solid var(--line); background:var(--panel)}
+  #edBox .edhead b{font-size:13.5px; color:var(--txt)}
+  #edBox .edhead .hint{font-size:11.5px; color:var(--txt3)}
+  #edText{
+    flex:1; min-height:220px; resize:vertical; border:none; outline:none; padding:14px 16px;
+    font-family:"Cascadia Code",Consolas,"Microsoft YaHei",monospace; font-size:13.5px; line-height:1.7;
+    background:var(--bg1); color:var(--txt);
+  }
+  #edBox .edfoot{display:flex; gap:10px; justify-content:flex-end; padding:10px 14px;
+    border-top:1px solid var(--line); background:var(--panel)}
+  #edMsg{font-size:12px; color:var(--txt3); margin-right:auto; align-self:center}
   @media (max-width:760px){ aside{display:none} .search input{width:130px} }
   @media print{
     /* 隐藏界面元素，只留正文 */
@@ -201,6 +229,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
   </div>
   <button class="btn" id="themeBtn" title="切换深色/浅色">🌗 主题</button>
   <button class="btn" id="printBtn" title="打印 / 导出 PDF">🖨 打印</button>
+  <button class="btn" id="editBtn" title="开启后双击正文任意区块即可就地编辑，保存写回源文件">✏️ 编辑</button>
   <button class="btn primary" id="openBtn">📂 打开 .md</button>
   <button class="btn" id="quitBtn" title="退出并关闭后台服务">⏻ 退出</button>
   <input type="file" id="file" accept=".md,.markdown,.txt" class="hidden" />
@@ -223,6 +252,23 @@ INDEX_HTML = r"""<!DOCTYPE html>
 </main>
 
 <div id="drop"><div class="ring">松开以打开 Markdown</div></div>
+
+<div id="edMask">
+  <div id="edBox">
+    <div class="edhead">
+      <b>✏️ 编辑此区块</b>
+      <span class="hint" id="edInfo"></span>
+      <span class="spacer"></span>
+      <span class="hint">Ctrl+Enter 保存</span>
+    </div>
+    <textarea id="edText" spellcheck="false"></textarea>
+    <div class="edfoot">
+      <span id="edMsg"></span>
+      <button class="btn" id="edCancel">取消</button>
+      <button class="btn primary" id="edSave">保存并写回文件</button>
+    </div>
+  </div>
+</div>
 
 <footer>
   <span class="dot" id="statusDot"></span>
@@ -249,17 +295,83 @@ INDEX_HTML = r"""<!DOCTYPE html>
 <script>
 const $ = s => document.querySelector(s);
 let DOC_NAME = "";
+let DOC_PATH = "";
+let EDIT_MODE = false;
 
-function setInitial(name, html){
+function setInitial(name, html, path){
   DOC_NAME = name || "";
+  if(path !== undefined) DOC_PATH = path || "";
   $("#preview").innerHTML = html || "";
   $("#empty").classList.toggle("hidden", !!html);
   $("#fname").textContent = name ? "📄 " + name : "未打开文件";
   const w = (html||"").replace(/<[^>]+>/g,"").length;
   $("#fmeta").textContent = html ? ("· 约 " + w + " 字") : "";
+  // 只有「从真实文件打开」的文档才可编辑（拖入/选择的内容没有落盘路径）
+  document.body.classList.toggle("editable", !!DOC_PATH);
+  if(!!DOC_PATH && !document.body.classList.contains("edit-mode")) setEditMode(true);
   buildToc();
   applyHighlights();
 }
+
+function setEditMode(on){
+  EDIT_MODE = on;
+  document.body.classList.toggle("edit-mode", on);
+  $("#editBtn").classList.toggle("primary", on);
+  $("#editBtn").textContent = on ? "✏️ 编辑中" : "✏️ 编辑";
+}
+
+$("#editBtn").onclick = ()=> setEditMode(!EDIT_MODE);
+
+// ===== 就地编辑：双击区块 → 弹框改源码 → 保存写回 .md =====
+let ED = null; // {start, end, scrollTop}
+function openEditor(el){
+  if(!DOC_PATH) return;
+  const ln = (el.getAttribute("data-ln")||"").split("-");
+  if(ln.length !== 2) return;
+  const start = parseInt(ln[0],10), end = parseInt(ln[1],10);
+  ED = {start, end, scrollTop: $("#preview").scrollTop};
+  $("#edMsg").textContent = "";
+  $("#edInfo").textContent = DOC_NAME + " · 第 " + start + "–" + end + " 行";
+  $("#edText").value = "加载中…";
+  $("#edMask").classList.add("show");
+  fetch("/api/source?path=" + encodeURIComponent(DOC_PATH) +
+        "&start=" + start + "&end=" + end, {cache:"no-store"})
+    .then(r=>r.json())
+    .then(d=>{ $("#edText").value = d.text || ""; $("#edText").focus(); })
+    .catch(()=>{ $("#edText").value = ""; $("#edMsg").textContent = "读取失败，请检查服务状态"; });
+}
+function closeEditor(){ $("#edMask").classList.remove("show"); ED = null; }
+function saveEditor(){
+  if(!ED) return;
+  const text = $("#edText").value;
+  $("#edMsg").textContent = "保存中…";
+  fetch("/api/save-block",{method:"POST",headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({path: DOC_PATH, start: ED.start, end: ED.end, text})})
+    .then(r=>r.json())
+    .then(d=>{
+      if(d.error){ $("#edMsg").textContent = "保存失败：" + d.error; return; }
+      const sc = ED.scrollTop;
+      closeEditor();
+      lastHtml = "";
+      setInitial(DOC_NAME, d.html, DOC_PATH);
+      $("#preview").scrollTop = sc; // 保持阅读位置
+      const st = $("#statusText");
+      st.textContent = "✓ 已保存到文件";
+      setTimeout(()=>{ st.textContent = "服务运行中"; }, 2500);
+    })
+    .catch(()=>{ $("#edMsg").textContent = "保存失败：服务未连接"; });
+}
+$("#preview").addEventListener("dblclick", e=>{
+  if(!EDIT_MODE || !DOC_PATH) return;
+  const el = e.target.closest("[data-ln]");
+  if(el) openEditor(el);
+});
+$("#edSave").onclick = saveEditor;
+$("#edCancel").onclick = closeEditor;
+$("#edText").addEventListener("keydown", e=>{
+  if((e.ctrlKey||e.metaKey) && e.key === "Enter"){ e.preventDefault(); saveEditor(); }
+  if(e.key === "Escape"){ e.preventDefault(); closeEditor(); }
+});
 
 function buildToc(){
   const toc = $("#toc");
@@ -335,7 +447,8 @@ function sendOpen(name, content){
     .then(d=>{
       PENDING = null;
       hideDown();
-      lastHtml=""; setInitial(d.name, d.html);
+      lastHtml="";
+      setInitial(d.name, d.html, ""); // 拖入/选择的临时内容未落盘，不可写回
     })
     .catch(err=> showDown());
 }
@@ -400,7 +513,7 @@ try{ if(localStorage.getItem("mdv-theme")==="dark"){ document.documentElement.cl
 
 // 初始文档（由后端注入）
 const INITIAL = __INITIAL__;
-if(INITIAL && INITIAL.html){ setInitial(INITIAL.name, INITIAL.html); }
+if(INITIAL && INITIAL.html){ setInitial(INITIAL.name, INITIAL.html, INITIAL.path || ""); }
 
 // 空窗口（home）唯一性：本窗口若没有文档，就作为「home」长轮询等待焦点。
 // 用户再次双击 exe 时，后端会触发 home-trigger，本窗口收到后聚焦自身，

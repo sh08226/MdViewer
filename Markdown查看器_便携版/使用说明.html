@@ -1,0 +1,45 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Markdown 查看器 · 使用手册</title><style>
+:root{ --bg:#fbfaf8; --panel:#f7f6f3; --line:rgba(32,36,42,.12); --txt:#24292f; --txt2:#57606a; --accent:#2f6497; }
+*{box-sizing:border-box}
+body{ font-family:-apple-system,"Segoe UI","Microsoft YaHei",Roboto,sans-serif; color:var(--txt); background:var(--bg); margin:0; padding:40px 48px 64px; line-height:1.8; }
+.wrap{max-width:860px; margin:0 auto;}
+h1{font-size:30px; border-bottom:2px solid var(--line); padding-bottom:.3em; margin-top:0}
+h2{font-size:22px; color:var(--accent); margin-top:1.8em; border-left:4px solid var(--accent); padding-left:12px}
+h3{font-size:17px; margin-top:1.2em}
+p,li{font-size:15.5px; color:#2b3138}
+a{color:var(--accent)}
+table{border-collapse:collapse; width:100%; margin:1em 0; font-size:14.5px}
+th,td{border:1px solid var(--line); padding:9px 12px; text-align:left}
+thead th{background:var(--panel)}
+blockquote{margin:1em 0; padding:10px 16px; border-left:3px solid var(--line); background:var(--panel); border-radius:0 8px 8px 0; color:var(--txt2)}
+code{background:#f1efe9; padding:2px 6px; border-radius:5px; font-size:.9em; border:1px solid var(--line)}
+hr{border:none; border-top:1px solid var(--line); margin:2em 0}
+.foot{margin-top:36px; padding-top:18px; border-top:1px solid var(--line); color:var(--txt2); font-size:13px; text-align:center}
+</style></head><body><div class="wrap"><h1>Markdown 查看器 · 使用手册</h1>
+<blockquote><p>一个<strong>零依赖、纯本地</strong>的轻量 Markdown 阅读器：双击 <code>MdViewer.exe</code> 即用，支持拖拽打开、目录导航、正文搜索、深色 / 浅色主题、一键打印 PDF，还能让电脑里的 <code>.md</code> 文件直接显示本图标、双击即用本程序打开。</p></blockquote>
+<hr />
+<h2>一、快速开始</h2>
+<ol><li>把整个 <code>MdViewer</code> 文件夹（或解压后的便携版）拷贝到任意位置（U 盘、另一台电脑均可）。</li><li><strong>双击 <code>MdViewer.exe</code></strong> —— 会自动在浏览器打开一个本地窗口，无需安装、无需联网。</li><li>把 <code>.md</code> / <code>.markdown</code> 文件<strong>拖进窗口</strong>，或点右上角「📂 打开 .md」选择文件，即可阅读。</li></ol>
+<blockquote><p>所有解析都在你本机完成，<strong>文件不上传任何网络</strong>。</p></blockquote>
+<hr />
+<h2>二、如何打开文档</h2>
+<table><thead><tr><th>方式</th><th>操作</th></tr></thead><tbody><tr><td>拖拽</td><td>把 <code>.md</code> 文件拖到窗口任意位置，松开即打开</td></tr><tr><td>按钮</td><td>点右上角「📂 打开 .md」→ 选择文件</td></tr><tr><td>右键 / 双击</td><td>先运行「安装关联.bat」，之后双击任意 <code>.md</code> 文件即直接用本程序打开</td></tr><tr><td>命令行</td><td><code>MdViewer.exe 说明.md</code>（可在批处理 / 脚本里调用）</td></tr></tbody></table>
+<p><strong>双开</strong>：同时打开多个不同的 <code>.md</code>，每个文件是<strong>独立的浏览器标签</strong>，互不干扰。</p>
+<p><strong>空窗口唯一</strong>：只双击 <code>MdViewer.exe</code>（不带文件）时，无论双击多少次，都只会<strong>聚焦已打开的那个空窗口</strong>，不会堆出一堆空标签页。</p>
+<hr />
+<h2>三、界面说明</h2>
+<ul><li><strong>左侧目录</strong>：打开文档后，自动按标题（H1/H2/H3）生成目录，点击跳转、滚动时高亮当前章节。</li><li><strong>右上角搜索</strong>：输入关键字，正文实时高亮匹配。</li><li><strong>🌗 主题</strong>：切换深色 / 浅色；选择会被记住，下次打开沿用。</li><li><strong>🖨 打印</strong>：一键调起打印（可「另存为 PDF」）。打印效果为干净黑字白底，适合存档。</li><li><strong>⏻ 退出</strong>：关闭后台服务并退出；所有窗口一起关闭。</li></ul>
+<blockquote><p>底部状态栏的绿灯表示本地服务正常；若服务断开，会弹出「重试连接」提示。</p></blockquote>
+<hr />
+<h2>四、文件关联（让 <code>.md</code> 显示本图标、双击打开）</h2>
+<ol><li>进入便携版根目录，双击 <strong><code>安装关联.bat</code></strong>（无需管理员，仅对当前用户生效）。</li><li>黑窗显示「完成」后，<code>.md</code> 文件即显示本查看器图标，双击即可打开。</li><li>若图标没变：在文件夹窗口按 <strong>F5</strong> 刷新；或重新运行一次 <code>安装关联.bat</code>。</li><li>想恢复系统默认（用记事本打开）：双击 <strong><code>卸载关联.bat</code></strong>。</li></ol>
+<blockquote><p>提示：文件夹挪到别的电脑后，重新运行一次 <code>安装关联.bat</code> 即可再次关联。</p></blockquote>
+<hr />
+<h2>五、常见问题</h2>
+<p><strong>Q：双击 <code>.md</code> 还是用记事本打开？</strong> A：先运行过「安装关联.bat」了吗？运行后按 F5。若仍不行，检查是否被其它软件抢占（右键 <code>.md</code> → 打开方式 → 选 <code>MdViewer.exe</code>）。</p>
+<p><strong>Q：打印出来的 PDF 字体看不清？</strong> A：已优化为白底黑字，正常「打印 / 另存为 PDF」即可；若浏览器勾选了「背景图形」，关掉即可更干净。</p>
+<p><strong>Q：换电脑后图标没了？</strong> A：关联是写入注册表的，换电脑需重新运行「安装关联.bat」。程序本身可直接拷贝运行。</p>
+<p><strong>Q：后台服务会不会常驻占资源？</strong> A：所有窗口关闭且 30 分钟无活动后，后台服务会<strong>自动退出</strong>；也可点「⏻ 退出」立即关闭。</p>
+<p><strong>Q：支持哪些 Markdown 语法？</strong> A：标题、列表（有序 / 无序 / 嵌套）、引用、代码块、表格、加粗 / 斜体、链接、分割线、删除线、高亮等常用语法。</p>
+<hr />
+<p><em>本程序为绿色便携软件，可自由拷贝、分享。</em></p><div class="foot">Markdown 查看器 · 绿色便携 · 纯本地离线</div></div></body></html>

@@ -60,13 +60,30 @@ def resolve_base():
 
 
 def _read_md(path):
-    """读取 .md 文件并返回 {name, html}；失败返回 None。"""
+    """读取 .md 文件并返回 {name, html, path, src}；失败返回 None。"""
     try:
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             text = f.read()
-        return {"name": os.path.basename(path), "html": mdrender.render(text)}
+        return {"name": os.path.basename(path), "html": mdrender.render(text, annotate=True),
+                "path": path, "src": text}
     except OSError:
         return None
+
+
+_MD_EXTS = (".md", ".markdown", ".txt")
+
+
+def _load_lines(path):
+    """读取文件为行列表（保留原始换行风格信息）。返回 (lines, crlf) 或 None。"""
+    if not path or not os.path.isfile(path) or not path.lower().endswith(_MD_EXTS):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore", newline="") as f:
+            raw = f.read()
+    except OSError:
+        return None
+    crlf = "\r\n" in raw
+    return raw.replace("\r\n", "\n").replace("\r", "\n").split("\n"), crlf
 
 
 # ---- 端口锁 / 活动心跳 ----
@@ -155,6 +172,24 @@ class Handler(BaseHTTPRequestHandler):
                 initial = {"name": os.path.basename(doc_path),
                            "html": "<p style='color:#b00'>无法读取文件：<br/>%s</p>" % safe}
             self._send(200, build_page(initial), "text/html; charset=utf-8")
+        elif parsed.path == "/api/source":
+            # 读取某文件指定行区间的原始源码（供就地编辑弹框显示）
+            qs = urllib.parse.parse_qs(parsed.query)
+            p = urllib.parse.unquote(qs.get("path", [""])[0])
+            try:
+                s = max(1, int(qs.get("start", ["1"])[0]))
+                e = int(qs.get("end", ["1"])[0])
+            except ValueError:
+                self._send(400, json.dumps({"error": "bad line range"})); return
+            data = _load_lines(p)
+            if data is None:
+                self._send(404, json.dumps({"error": "file not found"})); return
+            lines, _crlf = data
+            e = min(e, len(lines))
+            if s > e:
+                self._send(400, json.dumps({"error": "bad line range"})); return
+            self._send(200, json.dumps({"text": "\n".join(lines[s - 1:e])},
+                                       ensure_ascii=False))
         elif parsed.path == "/api/ping":
             self._send(200, json.dumps({"ok": True}))
         elif parsed.path == "/api/home-active":
@@ -196,6 +231,33 @@ class Handler(BaseHTTPRequestHandler):
                                            ensure_ascii=False))
             except Exception as e:  # noqa
                 self._send(500, json.dumps({"error": str(e)}, ensure_ascii=False))
+        elif parsed.path == "/api/save-block":
+            # 就地编辑保存：把文件 [start,end] 行替换为 text，返回整篇重新渲染的 HTML
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                raw = self.rfile.read(length) if length else b""
+                payload = json.loads(raw.decode("utf-8"))
+                p = payload.get("path", "")
+                s = int(payload.get("start", 0))
+                e = int(payload.get("end", 0))
+                text = payload.get("text", "")
+                if not p.lower().endswith(_MD_EXTS):
+                    self._send(400, json.dumps({"error": "仅支持 .md/.markdown/.txt"})); return
+                data = _load_lines(p)
+                if data is None:
+                    self._send(404, json.dumps({"error": "文件不存在"})); return
+                lines, crlf = data
+                s, e = max(1, s), max(s, e)
+                e = min(e, len(lines))
+                new_lines = text.replace("\r\n", "\n").split("\n")
+                lines[s - 1:e] = new_lines
+                new_text = "\n".join(lines)
+                with open(p, "w", encoding="utf-8", newline="") as f:
+                    f.write(new_text.replace("\n", "\r\n") if crlf else new_text)
+                self._send(200, json.dumps({"ok": True, "html": mdrender.render(new_text, annotate=True)},
+                                           ensure_ascii=False))
+            except Exception as ex:  # noqa
+                self._send(500, json.dumps({"error": str(ex)}, ensure_ascii=False))
         elif parsed.path == "/api/shutdown":
             self._send(200, json.dumps({"ok": True}))
             threading.Thread(target=_delayed_shutdown, daemon=True).start()

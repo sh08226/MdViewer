@@ -134,9 +134,17 @@ def _parse_list(lines, start):
     return "<%s>%s</%s>" % (tag, "".join(items_html), tag), i
 
 
-def render(md_text):
-    """将 Markdown 文本渲染为 HTML 片段（不含 <html> 外壳）。"""
+def render(md_text, annotate=False):
+    """将 Markdown 文本渲染为 HTML 片段（不含 <html> 外壳）。
+
+    annotate=True 时为顶层区块元素附加 data-ln="起始行-结束行"（1-based，
+    对应规范化换行后的源文件行号），供前端「双击就地编辑」定位源码。
+    """
     lines = md_text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+
+    def A(s, e):
+        return ' data-ln="%d-%d"' % (s, e) if annotate else ""
+
     out = []
     i = 0
     n = len(lines)
@@ -147,6 +155,7 @@ def render(md_text):
         # 围栏代码块
         if line.lstrip().startswith("```"):
             lang = line.lstrip()[3:].strip()
+            s0 = i
             buf = []
             i += 1
             while i < n and not lines[i].lstrip().startswith("```"):
@@ -154,14 +163,14 @@ def render(md_text):
                 i += 1
             i += 1  # 跳过结束 ```
             cls = (' class="lang-%s"' % escape_html(lang)) if lang else ""
-            out.append("<pre><code%s>%s</code></pre>" % (cls, escape_html("\n".join(buf))))
+            out.append("<pre%s><code%s>%s</code></pre>" % (A(s0 + 1, i), cls, escape_html("\n".join(buf))))
             continue
 
         # 标题
         m = re.match(r"^(#{1,6})\s+(.*)$", line)
         if m:
             level = len(m.group(1))
-            out.append("<h%d>%s</h%d>" % (level, _inline(escape_html(m.group(2).strip())), level))
+            out.append("<h%d%s>%s</h%d>" % (level, A(i + 1, i + 1), _inline(escape_html(m.group(2).strip())), level))
             i += 1
             continue
 
@@ -173,16 +182,18 @@ def render(md_text):
 
         # 引用块
         if line.lstrip().startswith(">"):
+            s0 = i
             buf = []
             while i < n and lines[i].lstrip().startswith(">"):
                 buf.append(lines[i].lstrip()[1:].lstrip())
                 i += 1
-            out.append("<blockquote>%s</blockquote>" % render("\n".join(buf)))
+            out.append("<blockquote%s>%s</blockquote>" % (A(s0 + 1, i), render("\n".join(buf))))
             continue
 
         # 表格
         if "|" in line and i + 1 < n and "-" in lines[i + 1] \
                 and re.match(r"^\s*\|?[\s:|-]+\|?\s*$", lines[i + 1]):
+            s0 = i
             header = _split_table_row(line)
             sep = _split_table_row(lines[i + 1])
             aligns = []
@@ -202,24 +213,27 @@ def render(md_text):
                     '<td%s>%s</td>' % (' style="text-align:%s"' % a if a else "", _inline(escape_html(c)))
                     for c, a in zip(r, aligns)) + "</tr>"
                 for r in rows)
-            out.append("<table><thead>%s</thead><tbody>%s</tbody></table>" % (thead, tbody))
+            out.append("<table%s><thead>%s</thead><tbody>%s</tbody></table>" % (A(s0 + 1, i), thead, tbody))
             continue
 
         # 列表
         if re.match(r"^(\s*)([-*+]|\d+[.)])\s+", line):
+            s0 = i
             items, i = _parse_list(lines, i)
+            items = re.sub(r"^<(ul|ol)", lambda m: "<%s%s" % (m.group(1), A(s0 + 1, i)), items, count=1)
             out.append(items)
             continue
 
         # 缩进代码块
         if line.startswith("    ") or line.startswith("\t"):
+            s0 = i
             buf = []
             while i < n and (lines[i].startswith("    ") or lines[i].startswith("\t") or lines[i].strip() == ""):
                 buf.append(lines[i].replace("\t", "    ")[4:] if lines[i].strip() != "" else "")
                 i += 1
             while buf and buf[-1] == "":
                 buf.pop()
-            out.append("<pre><code>%s</code></pre>" % escape_html("\n".join(buf)))
+            out.append("<pre%s><code>%s</code></pre>" % (A(s0 + 1, i), escape_html("\n".join(buf))))
             continue
 
         # 空行
@@ -228,12 +242,13 @@ def render(md_text):
             continue
 
         # 段落
+        s0 = i
         para = [line]
         i += 1
         while i < n and lines[i].strip() != "" and not _is_block_start(lines[i]):
             para.append(lines[i])
             i += 1
-        out.append("<p>%s</p>" % _inline(escape_html(" ".join(para))))
+        out.append("<p%s>%s</p>" % (A(s0 + 1, i), _inline(escape_html(" ".join(para)))))
 
     return "\n".join(out)
 
